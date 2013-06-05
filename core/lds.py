@@ -1,14 +1,21 @@
 """lds.py
 """
 
+
+__license__ = "Apache License, Version 2.0"
+__author__  = "Roland Kwitt, Kitware Inc., 2013"
+__email__   = "E-Mail: roland.kwitt@kitware.com"
+__status__  = "Development"
+
+
 import time
 import message
 import numpy as np
 from termcolor import colored
-
+from sklearn.utils.extmath import randomized_svd
 
 class lds:
-    """Implements a linear dynamical system (LDS) of the form
+    """Implements a linear dynamical system (LDS) of the form:
     
     x_{t+1} = A*x_t + w_t
     y_{t}   = C*x_t + v_t
@@ -18,57 +25,133 @@ class lds:
     """
     
     def __init__(self, nStates=1, doDebug=False):
-        self._A = []
-        self._C = []
-        self._R = [] 
-        self._Q = []
+        self._Ahat = None
+        self._Chat = None
+        self._Rhat = None
+        self._Qhat = None
+        self._Bhat = None
+        self._initM0 = None
+        self._initS0 = None
         self._doDebug = doDebug
         self._nStates = nStates
         
-        self.__estimated = False
+        self._estimated = False
+        
     
-    
-    def isEstimated(self): 
-        return self.__estimated
-
-
-    def estimate(self, Y, method='suboptimal'):
-        """System identification.
-    
-        tbd.
-        """
-        try:
-            { 
-                "suboptimal" : self._suboptimal 
-            }[method](Y)
-        except KeyError:
-            message.fail("%s not supported!" % method)
-            return
-    
-    
-    def synthesize(self, tau=50):
+    def synthesize(self, tau=50, mode=None):
         """Synthesize obervations.
         
-        tbd.
-        """
-        if not self.__estimated:
-            raise Exception("LDS parameters not valid (for synthesis)!")
+        Parameters
+        ----------
         
+        tau : int (default = 50)
+            Synthesize tau frames. 
+            
+        mode : Combination of ['s','q','r']
+            's' - Use the original states
+            'q' - Do NOT add state noise
+            'r' - Add observations noise
+
+            In case 's' is specified, 'tau' is ignored and the number of 
+            frames equals the number of state time points.
+            
+        Returns
+        -------
+        
+        I : numpy array, shape = (D, tau)
+            Matrix with N D-dimensional column vectors as observations.
+            
+        X : numpy array, shape = (N, tau) 
+            Matrix with N tau-dimensional state vectors.        
+        """
+        
+        Bhat = None
+        Xhat = self._Xhat
         Qhat = self._Qhat
         Ahat = self._Ahat
         Chat = self._Chat
+        Rhat = self._Rhat
         Yavg = self._Yavg
         initM0 = self._initM0
         initS0 = self._initS0
+        states = self._nStates
+                    
+        if mode is None:
+            raise Exception("No mode specified (synthesis)")
         
+        # use original states -> tau is restricted
+        if mode.find('s') >= 0:
+            tau = Xhat.shape[1]
+            if self._doDebug:
+                message.info('setting tau=%d' % tau)
         
+        # data to be filled and returned     
+        I = np.zeros((len(Yavg), tau))
+        X = np.zeros((self._nStates, tau))
         
+        if mode.find('r') >= 0:
+            stdR = np.sqrt(Rhat)
+        
+        # add state noise, unless user explicitely decides against
+        if not mode.find('q') >= 0:
+            if self._doDebug: 
+                message.info('adding state noise ...')
+            stdS = np.sqrt(initS0)
+            (U, S, V) = np.linalg.svd(Qhat, full_matrices=False)
+            Bhat = U*np.diag(np.sqrt(S)) 
     
+        t = 0 
+        Xt = np.zeros((self._nStates,1))
+        while (tau<0) or (t<tau):  
+            # uses the original states
+            if mode.find('s') >= 0:
+                Xt1 = Xhat[:,t]
+            # first state
+            elif t == 0:
+                Xt1 = initM0;
+                if mode.find('q') < 0:
+                    Xt1 += stdS*np.rand(self._nStates)
+            # any further states (if mode != 's')
+            else:
+                Xt1 = Ahat*Xt
+                if not mode.find('q') >= 0:
+                    Xt1 = Xt1 + Bhat*np.rand(self._nStates)
+            
+            # synthesizes image
+            It = Chat*Xt1 + np.reshape(Yavg,(len(Yavg),1))
+         
+            # adds observation noise
+            if mode.find('r') >= 0:
+                It += stdR*np.randn(length(Yavg))
+            
+            # save ...
+            Xt = Xt1;
+            I[:,t] = It.reshape(-1)
+            X[:,t] = Xt.reshape(-1)
+            t += 1
+            
+        return (I, X)
     
-    def _suboptimal(self, Y):
+        
+    def suboptimalSysID(self, Y, approximate=False):
         """Suboptimal system identification using SVD.
         
-        tbd.
+        Suboptimal system identification based on SVD, as proposed in the 
+        original work of Doretto et al. [1].
+    
+        All the interal LDS parameters are updated.
+        
+        Parameters
+        ----------
+        
+        Y : numpy array, shape = (N, D)
+            Input data with D observations as N-dimensional column vectors.
+
+        approximate : True|False
+            Use randomized (fast) SVD computation.
+                
+        Returns
+        -------
         """
         
         message.info("using suboptimal SVD-based estimation!")
@@ -79,9 +162,12 @@ class lds:
         Y = Y - Yavg[:,np.newaxis]
         
         t0 = time.clock()
-        (U, S, V) = np.linalg.svd(Y, full_matrices=1)
+        if approximate:
+            (U, S, V) = randomized_svd(Y, self._nStates)
+        else:
+            (U, S, V) = np.linalg.svd(Y, full_matrices=0)
         t1 = time.clock()
-        
+                
         if self._doDebug: 
             message.info('time(SVD): %.2g [sec]' % (t1-t0))
                 
@@ -100,8 +186,8 @@ class lds:
         
         Ahat = phi2*np.linalg.pinv(phi1)
         Vhat = phi2-Ahat*phi1;
-        Qhat = Vhat*Vhat.T
-        
+        Qhat = 1.0/Vhat.shape[1] * Vhat*Vhat.T 
+         
         errorY = Y - Chat*Xhat
         Rhat = np.var(errorY.ravel())
         
