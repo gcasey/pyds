@@ -1,6 +1,6 @@
 """dsutil.py
 
-I/O routines for dynamical systems.
+I/O and utility routines for dynamical systems.
 """
 
 import cv2
