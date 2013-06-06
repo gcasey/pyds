@@ -1,4 +1,6 @@
 """message.py
+
+Simple command-line messaging (with color).
 """
 
 

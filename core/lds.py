@@ -14,6 +14,7 @@ import numpy as np
 from termcolor import colored
 from sklearn.utils.extmath import randomized_svd
 
+
 class lds:
     """Implements a linear dynamical system (LDS) of the form:
     
@@ -24,18 +25,20 @@ class lds:
     and v_t are the state / observation noise, respectively.
     """
     
-    def __init__(self, nStates=1, doDebug=False):
+    def __init__(self, nStates=1, verbose=False):
         self._Ahat = None
         self._Chat = None
         self._Rhat = None
         self._Qhat = None
         self._Bhat = None
+        self._Xhat = None
+        self._Yavg = None
         self._initM0 = None
         self._initS0 = None
-        self._doDebug = doDebug
+        self._verbose = verbose
         self._nStates = nStates
         
-        self._estimated = False
+        self._ready = False
         
     
     def synthesize(self, tau=50, mode=None):
@@ -75,14 +78,17 @@ class lds:
         initM0 = self._initM0
         initS0 = self._initS0
         states = self._nStates
+        
+        if not self._ready:
+            raise Exception("LDS model not ready!")
                     
         if mode is None:
-            raise Exception("No mode specified (synthesis)")
+            raise Exception("No synthesis mode specified!")
         
         # use original states -> tau is restricted
         if mode.find('s') >= 0:
             tau = Xhat.shape[1]
-            if self._doDebug:
+            if self._verbose:
                 message.info('setting tau=%d' % tau)
         
         # data to be filled and returned     
@@ -94,7 +100,7 @@ class lds:
         
         # add state noise, unless user explicitely decides against
         if not mode.find('q') >= 0:
-            if self._doDebug: 
+            if self._verbose: 
                 message.info('adding state noise ...')
             stdS = np.sqrt(initS0)
             (U, S, V) = np.linalg.svd(Qhat, full_matrices=False)
@@ -138,8 +144,6 @@ class lds:
         
         Suboptimal system identification based on SVD, as proposed in the 
         original work of Doretto et al. [1].
-    
-        All the interal LDS parameters are updated.
         
         Parameters
         ----------
@@ -152,9 +156,12 @@ class lds:
                 
         Returns
         -------
+        
+        All the interal LDS parameters are updated upon return.
         """
         
-        message.info("using suboptimal SVD-based estimation!")
+        if self._verbose:
+            message.info("using suboptimal SVD-based estimation!")
         
         (N, tau) = Y.shape
         Yavg = np.mean(Y, axis=1)
@@ -168,7 +175,7 @@ class lds:
             (U, S, V) = np.linalg.svd(Y, full_matrices=0)
         t1 = time.clock()
                 
-        if self._doDebug: 
+        if self._verbose: 
             message.info('time(SVD): %.2g [sec]' % (t1-t0))
                 
         Chat = U[:,0:self._nStates]
@@ -200,6 +207,6 @@ class lds:
         self._Qhat = Qhat
         self._Rhat = Rhat
         
-        self.__estimated = True
+        self._ready = True
         
         
