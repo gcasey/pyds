@@ -7,6 +7,7 @@ import cv2
 import cv2.cv as cv
 import numpy as np
 import SimpleITK as sitk
+import message as message
 
 
 def renormalize(data, (newmin, newmax), oldrange=None):
@@ -153,6 +154,11 @@ def loadDataFromASCIIFile(inFile):
         header = fid.readline()
     
     dataSiz = [int(x) for x in header.split(' ')]
+    if len(dataSiz) != 3:
+        message.fail("Invalid header!")
+        raise Exception()
+        
+    
     dataMat = np.genfromtxt(inFile, dtype=np.float32, skip_header=1)    
     return (dataMat, dataSiz)
     

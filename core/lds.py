@@ -9,6 +9,7 @@ __status__  = "Development"
 
 
 import time
+import pickle
 import message
 import numpy as np
 from termcolor import colored
@@ -25,28 +26,83 @@ class lds:
     and v_t are the state / observation noise, respectively.
     """
     
-    def __init__(self, nStates=1, verbose=False):
-        self._Ahat = None
-        self._Chat = None
-        self._Rhat = None
-        self._Qhat = None
-        self._Bhat = None
-        self._Xhat = None
-        self._Yavg = None
-        self._initM0 = None
-        self._initS0 = None
-        self._verbose = verbose
-        self._nStates = nStates
+    def __init__(self, verbose=False):
+        """Initialize instance.
+        """
         
+        self._params = {
+            "Ahat" : None,
+            "Chat" : None,
+            "Rhat" : None,
+            "Qhat" : None,
+            "Xhat" : None,
+            "Yavg" : None,
+            "initM0" : None,
+            "initS0" : None,
+            "nStates" : None
+        }
+        
+        # LDS instance not ready at that point
         self._ready = False
+        self._verbose = verbose
+
+    
+    def check(self):
+        """Check validity of LDS parameters.
+     
+        Currently, this routine only checks if the parameters are set, but not
+        if they are actually valid parameters!
         
+        Returns:
+        --------
+        validity : boolean
+            True if parameters are valid, False otherwise.
+        """
+        
+        for key in self._params.keys():
+           if self._params[key] is None: return False
+        return True
+      
+        
+    def save(self, outFile):
+        """Pickle data to disk.
+        
+        Parameters
+        ----------
+        outFile : Filename of output file
+        """
+        
+        if not self.check():
+            message.fail("Cannot write non-ready LDS!")
+            raise Exception()
+        
+        pickle.dump(self._params, open(outFile, 'w'))
+        
+    
+    def load(self, inFile): 
+        """Load pickled parameters from disk.
+        
+        Parameters
+        ----------
+        inFile : string
+            Filename of input file.
+        """
+        
+        if self._verbose:
+            message.info("loading LDS parameters ...")
+        self._params = pickle.load(open(inFile))
+        
+        if self.check():
+            self._ready = True
+        else:
+            message.warn("Loaded model not ready!")
+            
     
     def synthesize(self, tau=50, mode=None):
         """Synthesize obervations.
         
         Parameters
         ----------
-        
         tau : int (default = 50)
             Synthesize tau frames. 
             
@@ -60,7 +116,6 @@ class lds:
             
         Returns
         -------
-        
         I : numpy array, shape = (D, tau)
             Matrix with N D-dimensional column vectors as observations.
             
@@ -68,46 +123,44 @@ class lds:
             Matrix with N tau-dimensional state vectors.        
         """
         
-        Bhat = None
-        Xhat = self._Xhat
-        Qhat = self._Qhat
-        Ahat = self._Ahat
-        Chat = self._Chat
-        Rhat = self._Rhat
-        Yavg = self._Yavg
-        initM0 = self._initM0
-        initS0 = self._initS0
-        states = self._nStates
-        
         if not self._ready:
-            raise Exception("LDS model not ready!")
-                    
+            message.fail("LDS not ready for synthesis!")
+            raise Exception()
+        
+        Bhat = None
+        Xhat = self._params["Xhat"]
+        Qhat = self._params["Qhat"]
+        Ahat = self._params["Ahat"]
+        Chat = self._params["Chat"]
+        Rhat = self._params["Rhat"]
+        Yavg = self._params["Yavg"]
+        initM0 = self._params["initM0"]
+        initS0 = self._params["initS0"]
+        nStates = self._params["nStates"]
+        
         if mode is None:
-            raise Exception("No synthesis mode specified!")
+            message.fail("No synthesis mode specified!")
+            raise Exception()
         
         # use original states -> tau is restricted
         if mode.find('s') >= 0:
             tau = Xhat.shape[1]
-            if self._verbose:
-                message.info('setting tau=%d' % tau)
         
         # data to be filled and returned     
         I = np.zeros((len(Yavg), tau))
-        X = np.zeros((self._nStates, tau))
+        X = np.zeros((nStates, tau))
         
         if mode.find('r') >= 0:
             stdR = np.sqrt(Rhat)
         
-        # add state noise, unless user explicitely decides against
+        # add state noise, unless user explicitly decides against
         if not mode.find('q') >= 0:
-            if self._verbose: 
-                message.info('adding state noise ...')
             stdS = np.sqrt(initS0)
             (U, S, V) = np.linalg.svd(Qhat, full_matrices=False)
             Bhat = U*np.diag(np.sqrt(S)) 
     
         t = 0 
-        Xt = np.zeros((self._nStates,1))
+        Xt = np.zeros((nStates, 1))
         while (tau<0) or (t<tau):  
             # uses the original states
             if mode.find('s') >= 0:
@@ -116,12 +169,12 @@ class lds:
             elif t == 0:
                 Xt1 = initM0;
                 if mode.find('q') < 0:
-                    Xt1 += stdS*np.rand(self._nStates)
+                    Xt1 += stdS*np.rand(nStates)
             # any further states (if mode != 's')
             else:
                 Xt1 = Ahat*Xt
                 if not mode.find('q') >= 0:
-                    Xt1 = Xt1 + Bhat*np.rand(self._nStates)
+                    Xt1 = Xt1 + Bhat*np.rand(nStates)
             
             # synthesizes image
             It = Chat*Xt1 + np.reshape(Yavg,(len(Yavg),1))
@@ -139,38 +192,38 @@ class lds:
         return (I, X)
     
         
-    def suboptimalSysID(self, Y, approximate=False):
+    def suboptimalSysID(self, Y, nStates, approximate=False):
         """Suboptimal system identification using SVD.
         
         Suboptimal system identification based on SVD, as proposed in the 
-        original work of Doretto et al. [1].
+        original work of Doretto et al. [1]. 
         
         Parameters
         ----------
-        
         Y : numpy array, shape = (N, D)
             Input data with D observations as N-dimensional column vectors.
 
-        approximate : True|False
+        nStates : int
+            Number of LDS states to estimate.
+
+        approximate : True|False (optional, default: False)
             Use randomized (fast) SVD computation.
-                
-        Returns
-        -------
-        
-        All the interal LDS parameters are updated upon return.
         """
         
         if self._verbose:
             message.info("using suboptimal SVD-based estimation!")
-        
+
+        if nStates < 0:
+            message.fail("#states < 0!")
+            raise Exception()
+
         (N, tau) = Y.shape
         Yavg = np.mean(Y, axis=1)
-        
         Y = Y - Yavg[:,np.newaxis]
         
         t0 = time.clock()
         if approximate:
-            (U, S, V) = randomized_svd(Y, self._nStates)
+            (U, S, V) = randomized_svd(Y, nStates)
         else:
             (U, S, V) = np.linalg.svd(Y, full_matrices=0)
         t1 = time.clock()
@@ -178,13 +231,12 @@ class lds:
         if self._verbose: 
             message.info('time(SVD): %.2g [sec]' % (t1-t0))
                 
-        Chat = U[:,0:self._nStates]
-        Xhat = (np.diag(S)[0:self._nStates,0:self._nStates] * 
-                np.asmatrix(V[0:self._nStates,:]))
+        Chat = U[:,0:nStates]
+        Xhat = (np.diag(S)[0:nStates,0:nStates] * np.asmatrix(V[0:nStates,:]))
     
         # initial condition N(initM0, initS0)
-        initM0 = np.mean(Xhat[:,0],axis=1)
-        initS0 = np.zeros((self._nStates,1))
+        initM0 = np.mean(Xhat[:,0], axis=1)
+        initS0 = np.zeros((nStates, 1))
                 
         pind = range(tau-1);
 
@@ -198,15 +250,18 @@ class lds:
         errorY = Y - Chat*Xhat
         Rhat = np.var(errorY.ravel())
         
-        self._initS0 = initS0
-        self._initM0 = initM0
-        self._Yavg = Yavg
-        self._Ahat = Ahat
-        self._Chat = Chat
-        self._Xhat = Xhat
-        self._Qhat = Qhat
-        self._Rhat = Rhat
+        # save parameters
+        self._params["nStates"] = nStates
+        self._params["initS0"] = initS0
+        self._params["initM0"] = initM0
+        self._params["Yavg"] = Yavg
+        self._params["Ahat"] = Ahat
+        self._params["Chat"] = Chat
+        self._params["Xhat"] = Xhat
+        self._params["Qhat"] = Qhat
+        self._params["Rhat"] = Rhat
         
+        # the LDS is ready
         self._ready = True
         
         

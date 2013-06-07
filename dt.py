@@ -40,11 +40,9 @@ OPTIONS (Overview):
         'lFile' - Image list file 
         
     [-n ARG] -- LDS states (default: 5)
-    [-m ARG] -- FPS for movie display (default: 20)
-        
-        Shows the input movie, or (if -s), the synthesis
-        result.
-    
+    [-o ARG] -- Save DT parameters -> ARG 
+    [-p ARG] -- Load DT parameters <- ARG
+    [-m ARG] -- FPS for synthesis movie (default: 20)
     [-e] -- Run estimation (default: False)
     [-s] -- Run synthesis  (default: False)
     [-v] -- Verbose output (default: False)
@@ -62,8 +60,10 @@ def main(argv=None):
         argv = sys.argv
 
     parser = OptionParser(add_help_option=False)
+    parser.add_option("-p", dest="pFile")
     parser.add_option("-i", dest="iFile") 
     parser.add_option("-t", dest="iType")
+    parser.add_option("-o", dest="oFile")
     parser.add_option("-n", dest="nStates", type="int", default=+5)
     parser.add_option("-m", dest="doMovie", type="int", default=-1)
     parser.add_option("-a", dest="svdRand", action="store_true", default=False)
@@ -76,41 +76,37 @@ def main(argv=None):
     if opt.shoHelp: 
         usage()
     
-    dataMat, dataSiz = None, None
-    if opt.iType == 'vFile':
-        (dataMat, dataSiz) = dsutil.loadDataFromVideoFile(opt.iFile)
-    elif opt.iType == 'aFile':
-        (dataMat, dataSiz) = dsutil.loadDataFromASCIIFile(opt.iFile)
-    elif opt.iType == 'lFile':
-        (dataMat, dataSiz) = dsutil.loadDataFromIListFile(opt.iFile)
-    else:
-        message.fail("Unsupported file type : %s", opt.iType)    
-        sys.exit(-1)
-    
-    dt = lds(nStates=opt.nStates, 
-             verbose=opt.verbose)
-
-    if opt.doEstim:
-        try:
-            dt.suboptimalSysID(dataMat, approximate=opt.svdRand)
-        except Exception as e:
-            message.fail("Oops ... : %s" % e)
-            sys.exit(-1)
-    
-    dataMatSyn, dataMatStates = None, None
-    if opt.doSynth:
-        try:
-            (dataMatSyn, dataMatStates) = dt.synthesize(tau=50, mode='s')
-        except Exception as e:
-            message.fail("Oops ... : %s" % e)
-            sys.exit(-1)
-                
-    if opt.doMovie > 0:
-        if dataMatSyn is None:
-            dsutil.showMovie(frames=dataMat, movSz=dataSiz, fps=opt.doMovie)
+    dataMat = None
+    dataSiz = None
+    try:
+        if opt.iType == 'vFile':
+            (dataMat, dataSiz) = dsutil.loadDataFromVideoFile(opt.iFile)
+        elif opt.iType == 'aFile':
+            (dataMat, dataSiz) = dsutil.loadDataFromASCIIFile(opt.iFile)
+        elif opt.iType == 'lFile':
+            (dataMat, dataSiz) = dsutil.loadDataFromIListFile(opt.iFile)
         else:
-            dsutil.showMovie(frames=dataMatSyn, movSz=dataSiz, fps=opt.doMovie)    
-                    
-                    
+            message.fail("Unsupported file type : %s", opt.iType)    
+            return -1
+    except Exception as e:
+        return -1
+
+    try:
+        dt = lds(verbose=opt.verbose)    
+        if not opt.pFile is None:
+            dt.load(opt.pFile)
+        if opt.doEstim:
+            dt.suboptimalSysID(dataMat, opt.nStates, opt.svdRand)
+        if opt.doSynth:
+           dataSyn, _ = dt.synthesize(tau=50, mode='s')
+        if opt.doMovie > 0:
+            print dataSyn.shape
+            if not dataSyn is None:
+                dsutil.showMovie(dataSyn, dataSiz, fps=opt.doMovie)
+        if not opt.oFile is None:
+            dt.save(opt.oFile)
+    except Exception as e:
+        return -1
+            
 if __name__ == '__main__':
     sys.exit(main())
