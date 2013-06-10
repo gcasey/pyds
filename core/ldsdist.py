@@ -18,14 +18,18 @@ from sklearn.utils.extmath import randomized_svd
 
 
 def ldsMartinDistance(lds1, lds2, N=20):
-    """Martin distance.
-    
-    Computation is done by first recursively setting up the matrices for 
-    the generalized Eigenvalue problem and then solving it.
+    """Martin distance between two LDS's.
     
     Algorithmic outline:
     --------------------
-    tbd.
+    
+    This code implements the subspace angle approach of
+    
+    [1] K. De Cock and B. De Moor, "Subspace angles between ARMA models", In:
+        Systen & Control Letters, vol 46, pp. 265-270, 2002
+
+    that is used in many works which implement the Martin distance as a 
+    similarity measure linear dynamical systems.
     
     Parameters:
     -----------
@@ -34,6 +38,10 @@ def ldsMartinDistance(lds1, lds2, N=20):
     
     lds2: core.lds instance
         Second LDS model.
+    
+    N : int (default: 20)
+        Number of iterations to compute the "infinite sum" that is the 
+        solution to the Lyapunov equation (see code.)
     
     Returns:
     --------

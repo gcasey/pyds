@@ -8,6 +8,7 @@ __email__   = "E-Mail: roland.kwitt@kitware.com"
 __status__  = "Development"
 
 
+import copy
 import time
 import pickle
 import message
@@ -263,5 +264,61 @@ class lds:
         
         # the LDS is ready
         self._ready = True
+ 
+ 
+    @staticmethod
+    def stateSpaceMap(lds1, lds2):
+        """
+        Map parameters from lds1 into space of lds2 (state-space).
         
+        Parameters:
+        -----------
+        lds1 : lds instance
+            Target LDS
         
+        lds2: lds instance
+            Source LDS
+        
+        Returns:
+        --------
+        lds : lds instance
+            New instance of lds2 (with UPDADED parameters)
+            
+        err : float
+            Absolute difference between the vectorized parameter sets before
+            the state-space mapping.
+        """
+        
+        # make a shallow copy (no compound object -> no problem)
+        lds = copy.copy(lds2)
+
+        Chat1 = lds1._params["Chat"]
+        Chat2 = lds2._params["Chat"]
+        
+       
+        F = np.asmatrix(np.linalg.pinv(Chat2))*Chat1
+     
+        # compute TRANSFORMED params (rest should be kept the same)
+        lds._params["Chat"] = lds2._params["Chat"]*F
+        lds._params["Ahat"] = F.T*lds2._params["Ahat"]*F
+        lds._params["Qhat"] = F.T*lds2._params["Qhat"]*F
+        lds._params["Rhat"] = lds2._params["Rhat"]
+        lds._params["initM0"] = F.T*lds2._params["initM0"]
+        lds._params["initS0"] = np.diag(F.T*np.diag(lds._params["initS0"].ravel())*F)
+        
+        err = 0
+        err += np.sum(np.abs(lds2._params["Chat"].ravel() - 
+                             lds1._params["Chat"].ravel()))
+        err += np.sum(np.abs(lds2._params["Ahat"].ravel() - 
+                             lds1._params["Ahat"].ravel()))
+        err += np.sum(np.abs(lds2._params["Qhat"].ravel() - 
+                             lds1._params["Qhat"].ravel()))
+        err += np.sum(np.abs(lds2._params["Rhat"].ravel() - 
+                             lds1._params["Rhat"].ravel()))
+        err += np.sum(np.abs(lds2._params["initM0"].ravel() - 
+                             lds1._params["initM0"].ravel()))                        
+        err += np.sum(np.abs(lds2._params["initS0"].ravel() - 
+                             lds1._params["initS0"].ravel()))                        
+        err += np.sum(np.abs(lds2._params["Yavg"].ravel() - 
+                             lds1._params["Yavg"].ravel()))                        
+        return (lds, err)

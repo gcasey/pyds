@@ -52,6 +52,7 @@ def main(argv=None):
     parser = OptionParser(add_help_option=False)
     parser.add_option("-s", dest="model1File")
     parser.add_option("-r", dest="model2File") 
+    parser.add_option("-n", dest="iterations", type="int", default=20)
     parser.add_option("-h", dest="shoHelp", action="store_true", default=False)
     parser.add_option("-v", dest="verbose", action="store_true", default=False) 
     opt, args = parser.parse_args()
@@ -67,10 +68,9 @@ def main(argv=None):
     dt1.load(opt.model1File)
     dt2.load(opt.model2File)
     
-    print ldsMartinDistance(dt1, dt2)
-    
-    
-    
+    print ldsMartinDistance(dt1, dt2, opt.iterations)
+    (dt2Prime, err) = lds.stateSpaceMap(dt1, dt2)
+    print ldsMartinDistance(dt1, dt2Prime, opt.iterations)
     
     
     
