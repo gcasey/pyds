@@ -6,7 +6,6 @@ I/O and utility routines for dynamical systems.
 import cv2
 import cv2.cv as cv
 import numpy as np
-import SimpleITK as sitk
 import message as message
 
 
@@ -187,6 +186,7 @@ def loadDataFromIListFile(inFile):
     dataSiz : tuple of (height, width, #images)    
         The video dimensions.
     """
+    import SimpleITK as sitk
     
     with open(inFile) as fid:
         fileNames = fid.readlines()

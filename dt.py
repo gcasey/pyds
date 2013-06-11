@@ -11,10 +11,7 @@ __status__  = "Development"
 
 
 import os
-import cv2
 import sys
-import numpy as np
-import cv2.cv as cv
 import core.dsutil as dsutil
 from core.lds import lds
 from core import message
