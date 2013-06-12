@@ -10,8 +10,12 @@ __status__  = "Development"
 import pycuda.autoinit
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
+import pycuda.cumath as cumath
 from pycuda.compiler import SourceModule
+import scikits.cuda.linalg as cla
 import numpy as np
+
+cla.init()
 
 mod = SourceModule('''
 __global__ void cyclebuffer(float *src, float* newframe, float* dst,
@@ -72,15 +76,39 @@ class cudabuffer:
     def current_frames(self):
         return self._Y_gpu.get()
         
+    def decompose(self):
+        gcov = cla.dot(self._Y_gpu, self._Y_gpu, transa='C')
+        ge_g, gh_g = np.linalg.eigh(gcov.get())
+        I = np.argsort(ge_g)[::-1]
+        ge_g, gh_g = np.sqrt(ge_g[I]), gh_g[:,I]
+        # push the matrix back out
+        gpueigs = gpuarray.to_gpu(gh_g)
+        W_g = cla.dot(self._Y_gpu, gpueigs)
+        # Unitize W_g - could be done on gpu to allow async returning
+        W_g = W_g.get()
+        W_g = W_g / np.sqrt(np.sum(W_g**2, axis=0))[np.newaxis, :]
+
+        return W_g, ge_g, gh_g.T # Not sure whether the last one should be transposed
 
 
 if __name__ == '__main__':
-    Y = np.arange(2048).reshape( (512, 4) ).astype(np.float32)
+    Y = np.random.random( (512, 4) ).astype(np.float32)
     mybuffer = cudabuffer(Y)
     print mybuffer.current_frames().astype(int)
 
-    mybuffer.add_new_frame(9*np.ones(Y.shape[0],).astype(np.float32))
-    print mybuffer.current_frames().astype(int)
+    # mybuffer.add_new_frame(9*np.ones(Y.shape[0],).astype(np.float32))
+    # print mybuffer.current_frames().astype(int)
 
-    mybuffer.add_new_frame(6*np.ones(Y.shape[0],).astype(np.float32))
-    print mybuffer.current_frames().astype(int)
+    # mybuffer.add_new_frame(6*np.ones(Y.shape[0],).astype(np.float32))
+    # print mybuffer.current_frames().astype(int)
+
+    U_g, w, V = mybuffer.decompose()
+    print w
+    print V
+    print U_g
+    
+    print '----'
+    U, v, W = np.linalg.svd(mybuffer.current_frames())
+    print v
+    print W
+    print U
