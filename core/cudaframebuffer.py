@@ -76,9 +76,9 @@ class cudabuffer:
         assert len(x) == self._featuredim
         
         x_gpu = gpuarray.to_gpu_async(x)
-        BLOCK_SIZE = (1,256,1)
+        BLOCK_SIZE = (256,1,1)
         nblocks = int(np.ceil(float(self._featuredim) / BLOCK_SIZE[0]))
-        GRID_SIZE = (self._framecount, nblocks, 1)
+        GRID_SIZE = (nblocks, self._framecount, 1)
 
         cudabuffer.cyclebuffer(self._Y_gpu_scratch, x_gpu, self._Y_gpu,
                                np.int32(self._featuredim), np.int32(self._framecount),
@@ -106,7 +106,7 @@ class cudabuffer:
 
 
 if __name__ == '__main__':
-    Y = np.random.random( (128**2, 40) ).astype(np.float32)
+    Y = np.random.random( (512**2, 40) ).astype(np.float32)
     #mybuffer = cudabuffer(Y)
 
     # mybuffer.add_new_frame(9*np.ones(Y.shape[0],).astype(np.float32))
@@ -115,18 +115,21 @@ if __name__ == '__main__':
     # mybuffer.add_new_frame(6*np.ones(Y.shape[0],).astype(np.float32))
     # print mybuffer.current_frames().astype(int)
 
-    with Timer('GPU'):
+    with Timer('GPU startup  '):
         mybuffer = cudabuffer(Y)
         U_g, w, V = mybuffer.decompose()
     
     Y = mybuffer.current_frames()
     print '----'
-    with Timer('CPU'):
+    with Timer('CPU          '):
         U, v, W = np.linalg.svd(Y, full_matrices=False)
 
-    with Timer('GPU'):
+    with Timer('GPU newframe '):
         mybuffer.add_new_frame(np.random.random(Y.shape[0],).astype(np.float32))
         U_g, w, V = mybuffer.decompose()
 
-    with Timer('GPU'):
+    with Timer('GPU decompose'):
+        U_g, w, V = mybuffer.decompose()
+
+    with Timer('GPU restartup'):
         U_g, w, V = mybuffer.decompose()
