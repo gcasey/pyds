@@ -14,8 +14,22 @@ import pycuda.cumath as cumath
 from pycuda.compiler import SourceModule
 import scikits.cuda.linalg as cla
 import numpy as np
+import time
 
 cla.init()
+
+class Timer(object):
+    def __init__(self, name=None):
+        self.name = name
+
+    def __enter__(self):
+        self.tstart = time.time()
+
+    def __exit__(self, type, value, traceback):
+        if self.name:
+            print '[%s]' % self.name,
+        print 'Elapsed: %s' % (time.time() - self.tstart)
+
 
 mod = SourceModule('''
 __global__ void cyclebuffer(float *src, float* newframe, float* dst,
@@ -92,7 +106,7 @@ class cudabuffer:
 
 
 if __name__ == '__main__':
-    Y = np.random.random( (512, 4) ).astype(np.float32)
+    Y = np.random.random( (128**2, 40) ).astype(np.float32)
     mybuffer = cudabuffer(Y)
     print mybuffer.current_frames().astype(int)
 
@@ -102,13 +116,16 @@ if __name__ == '__main__':
     # mybuffer.add_new_frame(6*np.ones(Y.shape[0],).astype(np.float32))
     # print mybuffer.current_frames().astype(int)
 
-    U_g, w, V = mybuffer.decompose()
-    print w
-    print V
-    print U_g
+    with Timer('GPU'):
+        U_g, w, V = mybuffer.decompose()
+        print w
+        print V
+        print U_g
     
-    print '----'
-    U, v, W = np.linalg.svd(mybuffer.current_frames())
-    print v
-    print W
-    print U
+    Y = mybuffer.current_frames()
+    with Timer('CPU'):
+        print '----'
+        U, v, W = np.linalg.svd(Y, full_matrices=False)
+        print v
+        print W
+        print U
