@@ -118,14 +118,14 @@ if __name__ == '__main__':
 
     with Timer('GPU'):
         U_g, w, V = mybuffer.decompose()
-        print w
-        print V
-        print U_g
+    print w
+    print V
+    print U_g
     
     Y = mybuffer.current_frames()
+    print '----'
     with Timer('CPU'):
-        print '----'
         U, v, W = np.linalg.svd(Y, full_matrices=False)
-        print v
-        print W
-        print U
+    print v
+    print W
+    print U
