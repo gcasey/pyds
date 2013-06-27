@@ -107,8 +107,7 @@ class cudabuffer:
 
 if __name__ == '__main__':
     Y = np.random.random( (128**2, 40) ).astype(np.float32)
-    mybuffer = cudabuffer(Y)
-    print mybuffer.current_frames().astype(int)
+    #mybuffer = cudabuffer(Y)
 
     # mybuffer.add_new_frame(9*np.ones(Y.shape[0],).astype(np.float32))
     # print mybuffer.current_frames().astype(int)
@@ -117,15 +116,17 @@ if __name__ == '__main__':
     # print mybuffer.current_frames().astype(int)
 
     with Timer('GPU'):
+        mybuffer = cudabuffer(Y)
         U_g, w, V = mybuffer.decompose()
-    print w
-    print V
-    print U_g
     
     Y = mybuffer.current_frames()
     print '----'
     with Timer('CPU'):
         U, v, W = np.linalg.svd(Y, full_matrices=False)
-    print v
-    print W
-    print U
+
+    with Timer('GPU'):
+        mybuffer.add_new_frame(np.random.random(Y.shape[0],).astype(np.float32))
+        U_g, w, V = mybuffer.decompose()
+
+    with Timer('GPU'):
+        U_g, w, V = mybuffer.decompose()
